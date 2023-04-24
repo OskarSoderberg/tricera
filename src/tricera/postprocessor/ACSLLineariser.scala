@@ -70,18 +70,18 @@ object ACSLLineariser {
     }
 
     println("\\problem {")
-    printExpression(formula)
+    printExpression(formula, Seq()) // CHECK
     println
     println("}")
   }
 
-  def printExpression(e : IExpression) = {
+  def printExpression(e : IExpression, acslArgNames : Seq[String]) = {
     val enriched = EnrichingVisitor.visit(e, ())
-    HeapyPrinter.visit(enriched, PrintContext(List(), "", 0))
+    HeapyPrinter.visit(enriched, PrintContext(List(), "", 0, acslArgNames))
   }
 
-  def asString(e : IExpression) : String =
-    ap.DialogUtil.asString { printExpression(e) }
+  def asString(e : IExpression, acslArgNames : Seq[String]) : String =
+    ap.DialogUtil.asString { printExpression(e, acslArgNames) }
 
   private def fun2Identifier(fun : IFunction) = fun.name
 
@@ -128,13 +128,14 @@ object ACSLLineariser {
 
   private case class PrintContext(vars : List[String],
                                   parentOp : String,
-                                  outerPrec : Int) {
-    def pushVar(name : String)          = PrintContext(name :: vars, parentOp, outerPrec)
-    def setParentOp(op : String)        = PrintContext(vars, op, outerPrec)
-    def addParentOp(op : String)        = PrintContext(vars, op + parentOp, outerPrec)
-    def setOpPrec(op : String, l : Int) = PrintContext(vars, op, l)
-    def addOpPrec(op : String, l : Int) = PrintContext(vars, op + parentOp, l)
-    def setPrecLevel(l : Int)           = PrintContext(vars, parentOp, l)
+                                  outerPrec : Int,
+                                  acslArgNames : Seq[String]) {
+    def pushVar(name : String)          = PrintContext(name :: vars, parentOp, outerPrec, acslArgNames)
+    def setParentOp(op : String)        = PrintContext(vars, op, outerPrec, acslArgNames)
+    def addParentOp(op : String)        = PrintContext(vars, op + parentOp, outerPrec, acslArgNames)
+    def setOpPrec(op : String, l : Int) = PrintContext(vars, op, l, acslArgNames)
+    def addOpPrec(op : String, l : Int) = PrintContext(vars, op + parentOp, l, acslArgNames)
+    def setPrecLevel(l : Int)           = PrintContext(vars, parentOp, l, acslArgNames)
   }
 
   private object AtomicTerm {
@@ -163,7 +164,7 @@ object ACSLLineariser {
       }
 
       if (vs.isEmpty)
-        "_" + ind
+        ctxt.acslArgNames(ind)
       else
         vs.head
     }
@@ -532,9 +533,17 @@ object ACSLLineariser {
 
     private def handleFun(fun : IFunction, ctxt : PrintContext) = { // this handles TOH functions
       if (fun.arity == 1) {
-        allButLast(ctxt setPrecLevel 0, ".", "." + fun2Identifier(fun), 1)
+        val printParentheses = (fun.name != "*")
+        print(fun2Identifier(fun))
+        if (printParentheses) {
+          print("(")
+        }
+        
+        val separator = if (printParentheses) "," else ""
+        // print("CTXT: " + ctxt) 
+        allButLast(ctxt setPrecLevel 0, separator, if (printParentheses) ")" else "", 1)
+        //SubArgs(List(ctxt setParentOp ")" setPrecLevel 0))
       } else if (fun.arity > 0) { // todo: should not be possible in ACSL
-
         print(fun2Identifier(fun))
         print("(")
         allButLast(ctxt setPrecLevel 0, ", ", ")", fun.arity)
@@ -544,8 +553,17 @@ object ACSLLineariser {
       }
     }
 
+    private def getVarName(index : Int, ctxt : PrintContext) : String = {
+      val isHeapVar = (index >= ctxt.vars.length)
+      if (isHeapVar)
+        ctxt.acslArgNames(index - ctxt.vars.length) // IS THIS REALLY CORRECT??
+      else
+        ctxt.vars(index)
+    }
+
     override def preVisit(t : IExpression,
                           oldCtxt : PrintContext) : PreVisitResult = {
+      import ap.theories.Heap
       // first use the precedence level of operators to determine whether we
       // have to insert parentheses
 
@@ -564,6 +582,11 @@ object ACSLLineariser {
 
       t match {
         // Terms
+
+        /* case ISortedVariable(index, _) => {
+          print(getVarName(index, ctxt))
+          noParentOp(ctxt) // is this correct?
+        }  */
 
         case AtomicTerm(t) => {
           print(atomicTerm(t, ctxt))
@@ -611,28 +634,42 @@ object ACSLLineariser {
         case IFunApp(ModuloArithmetic.bv_extract,
           Seq(IIntLit(upper), IIntLit(lower), t)) =>
             TryAgain(t, ctxt.addOpPrec("[" + upper + ":" + lower + "]", 10))
-            
-        //case e@IEquation(left@ISortedVariable, right) if (left.index)
+
+        // =========== EXPERIMENTS ===================
         
-        case funapp1@IFunApp(fun1, Seq(funapp2@IFunApp(fun2, _), args@_*)) => {
-          if (fun2Identifier(fun1) == "read" && fun2Identifier(fun2) == "write")
-            print("readwrite!")
-            handleFun(fun1, ctxt)
+
+        // read(h,p) -> *p
+        // TODO: Check that heap is @h
+        // fix instances where *\old(b) should be \old(*b)
+        case funapp@IFunApp(fun@Heap.HeapFunExtractor(heapTheory), Seq(heap@ISortedVariable(hIndex,_), pointer@ISortedVariable(pIndex,_))) 
+          if (fun == heapTheory.read && getVarName(hIndex, ctxt) == "@h") => {
+            print("*" + getVarName(pIndex, ctxt))
+            shortCut(ctxt)
         }
+
+        // read(\old(@h), \old(p)) -> \old(*p)
+        case funapp@IFunApp(fun@Heap.HeapFunExtractor(heapTheory), Seq(oldHeap@ISortedVariable(hIndex,_), oldPointer@ISortedVariable(pIndex,_))) 
+          if (fun == heapTheory.read && getVarName(hIndex, ctxt) == "\\old(@h)" 
+                                     && getVarName(pIndex, ctxt).startsWith("\\old")) => {
+            val oldWrappedVarName = getVarName(pIndex, ctxt)
+            val varName = oldWrappedVarName.substring(5, oldWrappedVarName.length - 1)
+            print("\\old(*" + varName + ")")
+            shortCut(ctxt)
+        }
+
+        // is_O_Int(read(@h, a)) -> \valid(a)
+        // FIX: ADT.CtorId(adt, sortNum) might match on default object
+        case IExpression.EqLit(IFunApp(ADT.CtorId(adt, sortNum), Seq(IFunApp(readFun@Heap.HeapFunExtractor(heapTheory), Seq(h@ISortedVariable(hIndex, _), a@ISortedVariable(vIndex, _))))), num)
+          if (readFun == heapTheory.read && getVarName(hIndex, ctxt) == "@h") => {
+            print("\\valid(" + getVarName(vIndex, ctxt) + ")")
+            shortCut(ctxt)
+          }
         
         case IFunApp(fun, _) => { // this handles TOH functions
-          if (fun.arity == 1) {
-            allButLast(ctxt setPrecLevel 0, ".", "." + fun2Identifier(fun), 1)
-          } else if (fun.arity > 0) { // todo: should not be possible in ACSL
-
-            print(fun2Identifier(fun))
-            print("(")
-            allButLast(ctxt setPrecLevel 0, ", ", ")", fun.arity)
-          } else {
-            print(fun2Identifier(fun))
-            KeepArg
-          }
+          handleFun(fun, ctxt)
         }
+
+        // =========== END EXPERIMENTS ===================
 
         case _ : ITermITE | _ : IFormulaITE => {
           print("\\if (")
@@ -649,7 +686,7 @@ object ACSLLineariser {
               print(pred.name)
             case left =>
               // In this special case, recursively print the antecedent
-              AbsyPrinter.visit(left, ctxt.setOpPrec("", 1))
+              HeapyPrinter.visit(left, ctxt.setOpPrec("", 1))
           }
 
           print(" -> ")

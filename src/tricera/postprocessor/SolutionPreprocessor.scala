@@ -50,7 +50,7 @@ trait SolutionProcessor {
   def apply(solution       : Solution)
            (predsToProcess : Seq[Predicate] = solution.keys.toSeq): Solution = {
     for ((pred, expr) <- solution) yield
-      (pred, (if (predsToProcess contains pred) apply(expr) else expr))
+      (pred, (if (predsToProcess contains pred) apply(pred, solution) else expr))
   }
 
   /**
@@ -58,5 +58,5 @@ trait SolutionProcessor {
    * @param expr : IExpression to process
    * @return     : processed IExpression
    */
-  def apply(expr : IExpression) : IExpression
+  def apply(predicate : Predicate, solution : Solution) : IExpression
 }

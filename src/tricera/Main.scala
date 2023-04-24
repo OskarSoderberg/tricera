@@ -477,25 +477,33 @@ class Main (args: Array[String]) {
             }
 
             val contexts = reader.getFunctionContexts
-            println("[contexts]:\n " + contexts.map({ case (k, v) => s"${k}=${v.prePred.pred.toString} : ${v.postPred.pred.toString} : ${v.acslContext.toString} : ${v.prePredACSLArgNames.toString} : ${v.postPredACSLArgNames.toString}"}).mkString(", "))
+            /* println("[contexts]:\n " + contexts.map({ case (k, v) => s"${k}=${v.prePred.pred.toString} : ${v.postPred.pred.toString} : ${v.acslContext.toString} : ${v.prePredACSLArgNames.toString} : ${v.postPredACSLArgNames.toString}"}).mkString(", ")) */
             val loopInvariants = reader.getLoopInvariants
             if ((displayACSL || log) &&
               (contexts.nonEmpty || loopInvariants.nonEmpty)) {
 
               val solutionProcessors = Seq(
-                ADTExploder
+                ADTExploder,
+                PostconditionSimplifier(contexts),
+                TOHProcessor
                 // add additional solution processors here
               )
+              //println("[atomremover context]:\n " + PostconditionSimplifier(contexts).contexts)
+             /*  val atomRemoverContexts = solutionProcessors(1) match {
+                case ar: PostconditionSimplifier => ar.contexts
+                case _ => "Not an PostconditionSimplifier instance"
+              } */
+              /* println("[atomremover context]:\n " + atomRemoverContexts) */
               var processedSolution: SolutionProcessor.Solution = solution
               // iteratively process the solution using all solution processors
               // this will only process the pre/post predicates' solutions due
               // to the second argument
-              println("[pre ADTExp]:\n " + processedSolution) // This contains non-translated solution
+              println("[pre processing]:\n " + processedSolution) // This contains non-translated solution
               for (processor <- solutionProcessors) {
                 processedSolution =
                   processor(processedSolution)() // will process all predicates
               }
-              println("[post ADTExp]:\n " + processedSolution) // pre and post equal in test case. Still contains non-translated solution
+              println("[post processing]:\n " + processedSolution) // pre and post equal in test case. Still contains non-translated solution
 
               println("\nInferred ACSL annotations")
               println("="*80)
@@ -506,11 +514,11 @@ class Main (args: Array[String]) {
                       !maybeEnc.get.postPredsToReplace.contains(ctx.postPred.pred)) {
 
                 // processedSolution(ctx.prePred.pred) is an IExpression containing ?the solution? 
-                println("[ctxprePred]:\n " + ctx.prePred.pred)
-                println("[procSol(prePred)]:\n " + processedSolution(ctx.prePred.pred))
-                val iexp = processedSolution(ctx.prePred.pred)
+                /* println("[ctxprePred]:\n " + ctx.prePred.pred)
+                println("[procSol(prePred)]:\n " + processedSolution(ctx.prePred.pred)) */
+                val iexp = processedSolution(ctx.postPred.pred)
                 import ap.parser.IExpression
-                println("[IExp structure]:\n")
+                /* println("[IExp structure]:\n") */
                 def printFirstRec(iexp : IExpression) : Unit = {
 
                   println(iexp.iterator.toList.length + " " +  iexp.iterator
@@ -520,40 +528,42 @@ class Main (args: Array[String]) {
                   for (ie <- iexp.iterator.toList)
                   printFirstRec(ie)
                 }
-                printFirstRec(iexp)
-                println("[IExpression]:\n" + iexp.iterator
+                /* printFirstRec(iexp) */
+                /* println("[IExpression]:\n" + iexp.iterator
                                                          .toList
                                                          .map(el => el.toString)
-                                                         .mkString(", "))
-            
-                val fPre = ACSLLineariser asString processedSolution(ctx.prePred.pred) // this seems to be doing the magic. IExpression probably holds information in a nice form. Read about!
-                val fPost = ACSLLineariser asString processedSolution(ctx.postPred.pred)
+                                                         .mkString(", ")) */
+                
+                val fPre = ACSLLineariser.asString(processedSolution(ctx.prePred.pred), ctx.prePredACSLArgNames) // this seems to be doing the magic. 
+                val fPost = ACSLLineariser.asString(processedSolution(ctx.postPred.pred), ctx.postPredACSLArgNames)
                 println("[fPre ]:\n  " + fPre)
-                println("[argnames]:\n  " + ctx.prePredACSLArgNames)
+                println("[fPost ]:\n  " + fPost)
+                println("[prePredACSLArgNames]:\n  " + ctx.prePredACSLArgNames)
+                println("[postPredACSLArgNames]:\n  " + ctx.postPredACSLArgNames)
                 // todo: implement replaceArgs as a solution processor
                 // replaceArgs does a simple string replacement (see above def)
-                val fPreWithArgs =
+                /* val fPreWithArgs =
                   replaceArgs(fPre, ctx.prePredACSLArgNames) // can for example replace variable name _1 with a
                 val fPostWithArgs =
-                  replaceArgs(fPost, ctx.postPredACSLArgNames)
+                  replaceArgs(fPost, ctx.postPredACSLArgNames) */
 
                 println("/* contracts for " + fun + " */")
                 println("/*@")
-                print(  "  requires "); println(fPreWithArgs + ";")
-                print(  "  ensures "); println(fPostWithArgs + ";")
+                print(  "  requires "); println(fPre + ";")
+                print(  "  ensures "); println(fPost + ";")
                 println("*/")
               }
               if(loopInvariants nonEmpty) {
                 println("/* loop invariants */")
                 for ((name, (inv, srcInfo)) <- loopInvariants) {
-                  val fInv = ACSLLineariser asString processedSolution.find(p =>
-                    p._1.name.stripPrefix("inv_") == inv.pred.name).get._2
-                  val fInvWithArgs =
-                    replaceArgs(fInv, inv.argVars.map(_.name))
+                  val fInv = ACSLLineariser.asString(processedSolution.find(p =>
+                    p._1.name.stripPrefix("inv_") == inv.pred.name).get._2, inv.argVars.map(_.name)) // CHECK!
+                  /* val fInvWithArgs =
+                    replaceArgs(fInv, inv.argVars.map(_.name)) */
                   println("\n/* loop invariant for the loop at line " +
                           srcInfo.line + " */")
                   println("/*@")
-                  print(  "  loop invariant "); println(fInvWithArgs + ";")
+                  print(  "  loop invariant "); println(fInv + ";")
                   println("*/")
                 }
               }

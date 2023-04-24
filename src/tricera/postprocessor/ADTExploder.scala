@@ -33,10 +33,13 @@ import ap.parser._
 import ap.theories.ADT.ADTProxySort
 import ap.theories.{ADT, TheoryRegistry}
 import ap.types.{MonoSortedIFunction, SortedConstantTerm}
+import IExpression.Predicate
 
 object ADTExploder extends SolutionProcessor {
-  def apply(expr : IExpression) : IExpression =
+  def apply(predicate : Predicate, solution : SolutionProcessor.Solution) : IExpression = {
+    val expr = solution(predicate)
     Rewriter.rewrite(expr, explodeADTs)
+  }
 
   case class ADTTerm(t : ITerm, adtSort : ADTProxySort)
   object adtTermExploder extends CollectingVisitor[Object, IExpression] {
