@@ -58,7 +58,7 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
             println("substFormula: \n" + substFormula)
             
             println("Solving riddle ...")
-            !!(formula) 
+            !!(substFormula) 
             
             println(???) /* fails: 
                 "ap.api.SimpleAPI$SimpleAPIForwardedException: 
