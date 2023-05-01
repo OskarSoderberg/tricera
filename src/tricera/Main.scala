@@ -483,9 +483,12 @@ class Main (args: Array[String]) {
               (contexts.nonEmpty || loopInvariants.nonEmpty)) {
 
               val solutionProcessors = Seq(
-                ADTExploder,
                 PostconditionSimplifier(contexts),
-                TOHProcessor
+                TOHProcessor,
+                EqualityProcessor(contexts),
+                // ACSLFunctionProcessor,
+                ADTExploder
+                //ClauseRemover(contexts)
                 // add additional solution processors here
               )
               //println("[atomremover context]:\n " + PostconditionSimplifier(contexts).contexts)
@@ -498,12 +501,12 @@ class Main (args: Array[String]) {
               // iteratively process the solution using all solution processors
               // this will only process the pre/post predicates' solutions due
               // to the second argument
-              println("[pre processing]:\n " + processedSolution) // This contains non-translated solution
+              /* println("[pre processing]:\n " + processedSolution) */ // This contains non-translated solution
               for (processor <- solutionProcessors) {
                 processedSolution =
                   processor(processedSolution)() // will process all predicates
               }
-              println("[post processing]:\n " + processedSolution) // pre and post equal in test case. Still contains non-translated solution
+              /* println("[post processing]:\n " + processedSolution) */ // pre and post equal in test case. Still contains non-translated solution
 
               println("\nInferred ACSL annotations")
               println("="*80)
@@ -533,13 +536,15 @@ class Main (args: Array[String]) {
                                                          .toList
                                                          .map(el => el.toString)
                                                          .mkString(", ")) */
-                
-                val fPre = ACSLLineariser.asString(processedSolution(ctx.prePred.pred), ctx.prePredACSLArgNames) // this seems to be doing the magic. 
-                val fPost = ACSLLineariser.asString(processedSolution(ctx.postPred.pred), ctx.postPredACSLArgNames)
+                println("linearising: \n" + processedSolution(ctx.prePred.pred))
+                println("linearising: \n" + processedSolution(ctx.postPred.pred))
+                //printFirstRec(processedSolution(ctx.postPred.pred))
+                val fPre = ACSLLineariser.asString(processedSolution(ctx.prePred.pred), ctx.prePredACSLArgNames, Some("pre")) // this seems to be doing the magic. 
+                val fPost = ACSLLineariser.asString(processedSolution(ctx.postPred.pred), ctx.postPredACSLArgNames, Some("post"))
+                println("[postPredACSLArgNames]:\n  " + ctx.postPredACSLArgNames)
+                println("[prePredACSLArgNames]:\n  " + ctx.prePredACSLArgNames)
                 println("[fPre ]:\n  " + fPre)
                 println("[fPost ]:\n  " + fPost)
-                println("[prePredACSLArgNames]:\n  " + ctx.prePredACSLArgNames)
-                println("[postPredACSLArgNames]:\n  " + ctx.postPredACSLArgNames)
                 // todo: implement replaceArgs as a solution processor
                 // replaceArgs does a simple string replacement (see above def)
                 /* val fPreWithArgs =
@@ -557,7 +562,7 @@ class Main (args: Array[String]) {
                 println("/* loop invariants */")
                 for ((name, (inv, srcInfo)) <- loopInvariants) {
                   val fInv = ACSLLineariser.asString(processedSolution.find(p =>
-                    p._1.name.stripPrefix("inv_") == inv.pred.name).get._2, inv.argVars.map(_.name)) // CHECK!
+                    p._1.name.stripPrefix("inv_") == inv.pred.name).get._2, inv.argVars.map(_.name), None) // CHECK!
                   /* val fInvWithArgs =
                     replaceArgs(fInv, inv.argVars.map(_.name)) */
                   println("\n/* loop invariant for the loop at line " +
