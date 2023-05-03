@@ -482,13 +482,12 @@ class Main (args: Array[String]) {
             if ((displayACSL || log) &&
               (contexts.nonEmpty || loopInvariants.nonEmpty)) {
 
+              
               val solutionProcessors = Seq(
-                PostconditionSimplifier(contexts),
                 TOHProcessor,
+                PostconditionSimplifier(contexts), // create common processor for pre/postconditions
                 EqualityProcessor(contexts),
-                // ACSLFunctionProcessor,
                 ADTExploder
-                //ClauseRemover(contexts)
                 // add additional solution processors here
               )
               //println("[atomremover context]:\n " + PostconditionSimplifier(contexts).contexts)
@@ -502,6 +501,7 @@ class Main (args: Array[String]) {
               // this will only process the pre/post predicates' solutions due
               // to the second argument
               /* println("[pre processing]:\n " + processedSolution) */ // This contains non-translated solution
+              println("preds " + solution.keys.toSeq)
               for (processor <- solutionProcessors) {
                 processedSolution =
                   processor(processedSolution)() // will process all predicates
@@ -539,8 +539,27 @@ class Main (args: Array[String]) {
                 println("linearising: \n" + processedSolution(ctx.prePred.pred))
                 println("linearising: \n" + processedSolution(ctx.postPred.pred))
                 //printFirstRec(processedSolution(ctx.postPred.pred))
-                val fPre = ACSLLineariser.asString(processedSolution(ctx.prePred.pred), ctx.prePredACSLArgNames, Some("pre")) // this seems to be doing the magic. 
-                val fPost = ACSLLineariser.asString(processedSolution(ctx.postPred.pred), ctx.postPredACSLArgNames, Some("post"))
+
+                println("preds " + solution.keys.toSeq)
+                println("pre " + ctx.prePred.pred)
+                println("post " + ctx.postPred.pred)
+                val solutionPrintProcessors = Seq(
+                  ACSLFunctionProcessor(contexts),
+                  ClauseRemover(contexts)
+                  
+                  // add additional solution processors here
+                ) 
+
+                var solutionToPrint = processedSolution
+                for (processor <- solutionPrintProcessors) {
+                  println("solution: \n" + solutionToPrint(ctx.postPred.pred))
+                  solutionToPrint =
+                    processor(solutionToPrint)(Seq(ctx.prePred.pred, ctx.postPred.pred)) // will process all predicates
+                }
+                
+                println("[solutionToPrint:] \n" + solutionToPrint(ctx.postPred.pred))
+                val fPre = ACSLLineariser.asString(solutionToPrint(ctx.prePred.pred), ctx.prePredACSLArgNames, Some("pre")) // this seems to be doing the magic. 
+                val fPost = ACSLLineariser.asString(solutionToPrint(ctx.postPred.pred), ctx.postPredACSLArgNames, Some("post"))
                 println("[postPredACSLArgNames]:\n  " + ctx.postPredACSLArgNames)
                 println("[prePredACSLArgNames]:\n  " + ctx.prePredACSLArgNames)
                 println("[fPre ]:\n  " + fPre)

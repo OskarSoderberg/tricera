@@ -637,52 +637,24 @@ object ACSLLineariser {
             TryAgain(t, ctxt.addOpPrec("[" + upper + ":" + lower + "]", 10))
 
         // =========== PRE- AND POSTCONDITIONS ===================
+
+        // can still not remove getVarName. due to \\old(*p) 
         
-        // THESE MATCHINGS MUST OCCUR IN CLAUSEREMOVER!!
+        case IAtom(ACSLExpression.valid, Seq(a@ISortedVariable(vIndex, _))) =>
+          print("\\valid(" + getVarName(vIndex, ctxt) + ")")
+          shortCut(ctxt)
 
-        // is_O_Int(read(@h, a)) -> \valid(a)
-        // FIX: ADT.CtorId(adt, sortNum) might match on default object
-        case IExpression.EqLit(IFunApp(ADT.CtorId(adt, sortNum), 
-                                       Seq(IFunApp(readFun@Heap.HeapFunExtractor(heapTheory), 
-                                                   Seq(h@ISortedVariable(hIndex, _), 
-                                                       a@ISortedVariable(vIndex, _))))), 
-                               num)
-          if (ctxt.conditionType.isDefined && readFun == heapTheory.read 
-                                      && getVarName(hIndex, ctxt) == "@h") => {
-            print("\\valid(" + getVarName(vIndex, ctxt) + ")")
-            shortCut(ctxt)
-          }
+        case IFunApp(ACSLExpression.deref, Seq(a@ISortedVariable(pIndex, _))) =>
+          print("*" + getVarName(pIndex, ctxt))
+          shortCut(ctxt)
+        
+        case IFunApp(ACSLExpression.oldDeref, Seq(a@ISortedVariable(pIndex, _))) =>
+          val oldWrappedVarName = getVarName(pIndex, ctxt)
+          val varName = oldWrappedVarName.substring(5, oldWrappedVarName.length - 1)
+          print("\\old(*" + varName + ")")
+          shortCut(ctxt)
 
-        // read(h,p).get_<sort> -> *p
-        // TODO: Check that heap is @h
-        // fix instances where *\old(b) should be \old(*b)
-        case IFunApp(getFun,
-                     Seq(IFunApp(readFun@Heap.HeapFunExtractor(heapTheory), 
-                                 Seq(heap@ISortedVariable(hIndex,_), 
-                                     pointer@ISortedVariable(pIndex,_)))))
-          if (ctxt.conditionType.isDefined && getFun.name.startsWith("get") 
-                                           && readFun == heapTheory.read 
-                                           && getVarName(hIndex, ctxt) == "@h") => {
-
-            print("*" + getVarName(pIndex, ctxt))
-            shortCut(ctxt)
-          }
-
-        // read(\old(@h), \old(p)) -> \old(*p)
-        case IFunApp(getFun,
-                     Seq(IFunApp(fun@Heap.HeapFunExtractor(heapTheory), 
-                             Seq(oldHeap@ISortedVariable(hIndex,_), 
-                                 oldPointer@ISortedVariable(pIndex,_)))))
-          if (ctxt.conditionType.isDefined && fun == heapTheory.read 
-                                           && getVarName(hIndex, ctxt) == "\\old(@h)" 
-                                           && getVarName(pIndex, ctxt).startsWith("\\old")) => {
-            val oldWrappedVarName = getVarName(pIndex, ctxt)
-            val varName = oldWrappedVarName.substring(5, oldWrappedVarName.length - 1)
-            print("\\old(*" + varName + ")")
-            shortCut(ctxt)
-          }
-
-        case funAppTOH@IFunApp(fun@Heap.HeapFunExtractor(heapTheory), _) 
+        case funAppTOH@IFunApp(fun@Heap.HeapFunExtractor(heapTheory), _)
           if (ctxt.conditionType.isDefined) => { // this handles TOH functions
             handleFun(fun, ctxt)
           }

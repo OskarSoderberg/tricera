@@ -26,11 +26,11 @@ class EqualityProcessor private (var contexts: Map[String, FunctionContext]) ext
                     val functionContext = contexts(funName)
                     val precondition = solution(functionContext.prePred.pred).asInstanceOf[IFormula]
 
-                    println("precondition \n" + precondition)
-                    println("postcondition \n" + postcondition)
+                    /* println("precondition \n" + precondition)
+                    println("postcondition \n" + postcondition) */
                     val equalityVisitor = new EqualityVisitor
                     equalityVisitor.visit(precondition, 0)
-                    println("next")
+                    /* println("next") */
                     equalityVisitor.visit(postcondition, 0)
                     val equalityMap = equalityVisitor.getEM
                     println(equalityMap)

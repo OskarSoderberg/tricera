@@ -38,10 +38,10 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
 
             val maxQuantifierDepth = MaxQuantifierDepthVisitor.countMaxQuantifierDepth(f)
             val maxIndex = MaxIndexVisitor.countMaxIndex(f)
-            println("-- maxQuantifierDepth: " + maxQuantifierDepth)
-            println("-- maxIndex: " + maxIndex)
-            val freeVarsCount = (maxIndex - maxQuantifierDepth + 1)
-            println("-- freeVarsCount: " + freeVarsCount)
+            /* println("-- maxQuantifierDepth: " + maxQuantifierDepth)
+            println("-- maxIndex: " + maxIndex) */
+            val freeVarsCount = (maxIndex)
+            /* println("-- freeVarsCount: " + freeVarsCount) */
             val constants = p.createConstants("c", 0 to freeVarsCount).toList
             val formula = VariableSubstVisitor(f.asInstanceOf[IFormula], (constants, 0))
 
@@ -51,19 +51,19 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
                 coll.theories
             }
             addTheories(theories)
-            println("-- theories: " + theories)
+            /* println("-- theories: " + theories) */
 
             println("-- formula (pre ==> (post <=> simplify(post))): \n")
             PrintIExpressionVisitor(formula)
             
-            println("-- Solving riddle ...")
+            /* println("-- Solving riddle ...") */
             ??(formula)
             val result = try withTimeout(100) {
                 ???
             } catch {
                 case x: SimpleAPI.SimpleAPIException if x == TimeoutException => None
             }
-            println("-- result: " + result)
+            /* println("-- result: " + result) */
             var success = false
             val pc : IExpression = result match {
                 case ProverStatus.Valid => 
@@ -85,7 +85,7 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
             case Some(funName) if (isPostcondition(funName, predicate.name)) => 
                 val functionContext = contexts(funName)
                 val precondition = solution(functionContext.prePred.pred).asInstanceOf[IFormula]
-                println("=== Simplifying: ======================================================")
+                /* println("=== Simplifying: ======================================================")
                 println("-- funName: " + funName)
                 println("-- predicate: " + predicate)
                 println("-- predicate.name: " + predicate.name)
@@ -93,20 +93,20 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
                 println("-- argNames: \n" + functionContext.prePredACSLArgNames)
                 println("-- precondition: \n" + precondition)
                 println("-- postcondition: \n" + expr)
-                println("-- Starting iteration")
+                println("-- Starting iteration") */
                 var postcondition = expr
                 var i = 0
                 var cont = true
                 while (cont) {
-                    println("---- Iteration:" + i)
+                    /* println("---- Iteration:" + i) */
                     //println("---- postcondition: \n")
                     //PrintIExpressionVisitor(postcondition)
                     ReplaceNthFormula(postcondition, i) match {
                         case (simplifiedPostcondition, None) => 
                             cont = false
                         case (simplifiedPostcondition, Some(replacedFormula)) =>
-                            println("-- replacedFormula: \n")
-                            PrintIExpressionVisitor(replacedFormula)
+                            /* println("-- replacedFormula: \n") */
+                            /* PrintIExpressionVisitor(replacedFormula) */
                             //println("-- simplifiedPostcondition: \n")
                             //PrintIExpressionVisitor(simplifiedPostcondition)
                             simplifyPostcondition(precondition.asInstanceOf[IFormula], 
@@ -118,7 +118,7 @@ class PostconditionSimplifier private (var contexts: Map[String, FunctionContext
                     }
                     i = i + 1
                 }
-                println("===================================================================")
+                /* println("===================================================================") */
                 CleanupVisitor.cleanup(postcondition)
             case _ => expr
         }
